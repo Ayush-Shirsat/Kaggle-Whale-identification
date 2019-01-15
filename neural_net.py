@@ -191,15 +191,38 @@ p = model.predict_proba(X_test) # To predict probability
 res = []
 
 for answers in range(0, len(p)):
-    ans = p[answers]
+    ans = copy(p[answers])
     for w in range(0,5):
         idx = argmax(ans)
         res.append(idx)
-        ans[idx] = 0
+        ans[idx] = -1
     ans = 0
-        
-        
     
+# res = reshape(res, [7960, 5])
+        
+# res = array(res)
+csvfin = []
+for r in range(0, len(res)):
+    csvfin.append(list(encoding.keys())[list(encoding.values()).index(res[r])])
+    
+np.save('csvfin', array(csvfin))    
+    
+csvfin = reshape(csvfin, [7960, 5])
+ 
+df = pd.DataFrame(data=csvfin[0:,0:])
+       
+df['Id'] = df[df.columns[0:]].apply(
+   lambda x: ' '.join(x.dropna().astype(str)),
+   axis=1)
+
+df2 = df[['Id']]
+#df2 = df2.as_matrix()
+
+file2 = pd.DataFrame(data=(file_test[0:]))
+
+myData = pd.concat([file2, df2], axis=1, sort=False)
+myData.to_csv('kaggle_whale.csv')
+
 #print('\nConfusion Matrix')
 #print(confusion_matrix(np.argmax(Y_test,axis=1), y_pred)) # Prints Confusion matrix for analysis
 
@@ -214,4 +237,4 @@ print("Saved model to disk")
 
 # X_test and Y_test are saved so model can be tested 
 np.save('X_test', X_test)
-np.save('Y_test', Y_test)
+
