@@ -14,6 +14,7 @@ from keras.layers.convolutional import Convolution2D, MaxPooling2D
 from keras.optimizers import SGD,RMSprop,adam
 from keras.utils import np_utils
 from keras.models import model_from_json
+from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
@@ -26,6 +27,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report,confusion_matrix
 import csv
 import cv2
+import pandas as pd
 
 # paths
 path1 = "./train/"
@@ -72,6 +74,14 @@ with open('train.csv', mode='r') as csv_file:
 train = array(train)
 label = array(label)
 
+label = list(label)
+label2 = pd.factorize(label)
+label = label2[0]
+l_name = label2[1]
+encoding = {}
+for i in range(0,len(l_name)):
+    encoding.update({str(l_name[i]): i})
+
 # Shuffling data and label together in a random order
 data,Label = shuffle(train,label, random_state = 4)
 
@@ -79,11 +89,10 @@ data,Label = shuffle(train,label, random_state = 4)
 batch_size = 256
 # number of output classes
 temp = set(Label)
-temp = temp
-print(len(temp))
 nb_classes = len(temp)
+print(nb_classes)
 # number of epochs to train
-nb_epoch = 100
+nb_epoch = 5
 
 # number of convolutional filters to use
 nb_filters_1 = 20
@@ -100,22 +109,22 @@ nb_conv = 5
 
 # Split x and y into training and testing sets in random order
 # X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state = 4)
-
-# X_train = x.reshape(x.shape[0], img_rows, img_cols, 1)
+X_train = x
+X_train = X_train.reshape(x.shape[0], img_rows, img_cols, 1)
 # X_test = X_test.reshape(X_test.shape[0], img_rows, img_cols, 1)
 
 # Assigning X_train and X_test as float
-# X_train = X_train.astype('float32') 
+X_train = X_train.astype('float32') 
 # X_test = X_test.astype('float32')
-
+#######################################################################################
 # Normalization of data 
 # Data pixels are between 0 and 1
 X_train /= 255
-Y_train = y
 # X_test /= 255
 
 # Convert class vectors to binary class matrices
-# Y_train = np_utils.to_categorical(y, nb_classes)
+Y_train = y
+Y_train = np_utils.to_categorical(Y_train, nb_classes)
 # Y_test = np_utils.to_categorical(y_test, nb_classes)
 
 # Implementing a LeNet-5 model
@@ -124,7 +133,7 @@ model = Sequential()
 model.add(Convolution2D(nb_filters_1, kernel_size = (nb_conv, nb_conv), activation='relu', input_shape=(img_rows, img_cols, 1)))
 model.add(MaxPooling2D(pool_size = (nb_pool, nb_pool), strides = (2, 2)))
 
-model.add(Convolution2D(nb_filters_2, kernel_size = (nb_conv, nb_conv), activation='relu'))
+model.add(Convolution2D(nb_filters_2, kernel_size = (nb_conv, nb_conv), activation='relu', input_shape=(img_rows, img_cols, 1)))
 model.add(MaxPooling2D(pool_size = (nb_pool, nb_pool), strides = (2, 2)))
 
 model.add(Flatten())
@@ -136,9 +145,9 @@ model.add(Dense(nb_classes, activation='softmax'))
 # Loss is calculated using categorical cross entropy
 opt = SGD(lr = 0.01)
 model.compile(loss='categorical_crossentropy', optimizer = opt, metrics = ['accuracy'])
-         
+callbacks = [EarlyStopping(monitor='val_acc', patience=5)]         
 # Starts training the model      
-hist = model.fit(X_train, Y_train, batch_size = batch_size, epochs = nb_epoch, verbose = 1, validation_split = 0.25, shuffle = True)
+hist = model.fit(X_train, Y_train, batch_size = batch_size, epochs = nb_epoch, verbose = 1, validation_split = 0.1, shuffle = True)
 
 # visualizing losses and accuracy
 train_loss = hist.history['loss']
@@ -146,15 +155,53 @@ val_loss = hist.history['val_loss']
 train_acc = (hist.history['acc'])
 val_acc = (hist.history['val_acc'])
 #########################################################################
-score = model.evaluate(X_test, Y_test, verbose=0) # accuracy check
-print('Test accuracy:', score[1]) # Prints test accuracy
+path = "./test/"
+test = []
+file_test = os.listdir("test")
+j = 1
+for row in file_test:
+        test_img = row
+        im = Image.open(path + test_img)   
+        img = im.resize((img_rows,img_cols))
+        gray = array(img.convert('L')).flatten()
+        test.append(gray)
+        print(j)
+        j = j+1
+
+
+#########################################################################
+X_test = array(test)
+X_test = X_test.reshape(X_test.shape[0], img_rows, img_cols, 1)
+
+# Assigning X_train and X_test as float
+X_test = X_test.astype('float32') 
+
+X_test /= 255
+#######################################################################################
+# Normalization of data 
+# Data pixels are between 0 and 1
+
+
+# score = model.evaluate(X_test, Y_test, verbose=0) # accuracy check
+# print('Test accuracy:', score[1]) # Prints test accuracy
  
 y_pred = model.predict_classes(X_test) # Predicts classes of all images in test data 
 
 p = model.predict_proba(X_test) # To predict probability
+res = []
 
-print('\nConfusion Matrix')
-print(confusion_matrix(np.argmax(Y_test,axis=1), y_pred)) # Prints Confusion matrix for analysis
+for answers in range(0, len(p)):
+    ans = p[answers]
+    for w in range(0,5):
+        idx = argmax(ans)
+        res.append(idx)
+        ans[idx] = 0
+    ans = 0
+        
+        
+    
+#print('\nConfusion Matrix')
+#print(confusion_matrix(np.argmax(Y_test,axis=1), y_pred)) # Prints Confusion matrix for analysis
 
 # Serialize model to JSON
 model_json = model.to_json()
