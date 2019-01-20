@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Mon Jan 14 15:54:58 2019
-
 @author: Ayush Shirsat
 """
 
@@ -41,21 +40,27 @@ img_channels = 1
 label = []
 train = []
 i = 1
+count = 0
 ################################################################################
 # Path to Dataset  
 with open('train.csv', mode='r') as csv_file:
     csv_reader = csv.reader(csv_file, delimiter=',')
-    for row in csv_reader:
+    while count <= (9664*2):
+        row = next(csv_reader)
+#        for row in csv_reader:
         file = row[0]
-        label.append(row[1])
-        im = Image.open(path1 + file)   
-        img = im.resize((img_rows,img_cols))
-        gray = array(img.convert('L')).flatten()
+        if row[1] == 'new_whale':
+            label.append(row[1])
+        else:
+            label.append('Not_new_whale')
+        im = cv2.imread(path1 + file)   
+        img = cv2.resize(im, (img_rows, img_cols))
+        gray = array(img).flatten()
         train.append(gray)
         print(i)
         i = i+1
-        
-          
+        count = count + 1
+      
         # gray.save(path2 +  file, "JPEG")
         
         #print(row[0])
@@ -92,7 +97,7 @@ temp = set(Label)
 nb_classes = len(temp)
 print(nb_classes)
 # number of epochs to train
-nb_epoch = 5
+nb_epoch = 100
 
 # number of convolutional filters to use
 nb_filters_1 = 20
@@ -108,32 +113,32 @@ nb_conv = 5
 (x, y) = (data, Label)
 
 # Split x and y into training and testing sets in random order
-# X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state = 4)
+X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state = 4)
 X_train = x
-X_train = X_train.reshape(x.shape[0], img_rows, img_cols, 1)
-# X_test = X_test.reshape(X_test.shape[0], img_rows, img_cols, 1)
+X_train = X_train.reshape(x.shape[0], img_rows, img_cols, 3)
+X_test = X_test.reshape(X_test.shape[0], img_rows, img_cols, 3)
 
 # Assigning X_train and X_test as float
 X_train = X_train.astype('float32') 
-# X_test = X_test.astype('float32')
+X_test = X_test.astype('float32')
 #######################################################################################
 # Normalization of data 
 # Data pixels are between 0 and 1
 X_train /= 255
-# X_test /= 255
+X_test /= 255
 
 # Convert class vectors to binary class matrices
 Y_train = y
 Y_train = np_utils.to_categorical(Y_train, nb_classes)
-# Y_test = np_utils.to_categorical(y_test, nb_classes)
+Y_test = np_utils.to_categorical(y_test, nb_classes)
 
 # Implementing a LeNet-5 model
 model = Sequential()
 
-model.add(Convolution2D(nb_filters_1, kernel_size = (nb_conv, nb_conv), activation='relu', input_shape=(img_rows, img_cols, 1)))
+model.add(Convolution2D(nb_filters_1, kernel_size = (nb_conv, nb_conv), activation='relu', input_shape=(img_rows, img_cols, 3)))
 model.add(MaxPooling2D(pool_size = (nb_pool, nb_pool), strides = (2, 2)))
 
-model.add(Convolution2D(nb_filters_2, kernel_size = (nb_conv, nb_conv), activation='relu', input_shape=(img_rows, img_cols, 1)))
+model.add(Convolution2D(nb_filters_2, kernel_size = (nb_conv, nb_conv), activation='relu', input_shape=(img_rows, img_cols, 3)))
 model.add(MaxPooling2D(pool_size = (nb_pool, nb_pool), strides = (2, 2)))
 
 model.add(Flatten())
@@ -144,8 +149,8 @@ model.add(Dense(nb_classes, activation='softmax'))
 # Optimizer used is Stochastic Gradient Descent with learning rate of 0.01
 # Loss is calculated using categorical cross entropy
 opt = SGD(lr = 0.01)
-model.compile(loss='categorical_crossentropy', optimizer = opt, metrics = ['accuracy'])
-callbacks = [EarlyStopping(monitor='val_acc', patience=5)]         
+model.compile(loss='binary_crossentropy', optimizer = opt, metrics = ['accuracy'])
+callbacks = [EarlyStopping(monitor='val_loss', patience=5)]         
 # Starts training the model      
 hist = model.fit(X_train, Y_train, batch_size = batch_size, epochs = nb_epoch, verbose = 1, validation_split = 0.1, shuffle = True)
 
@@ -161,17 +166,26 @@ file_test = os.listdir("test")
 j = 1
 for row in file_test:
         test_img = row
-        im = Image.open(path + test_img)   
-        img = im.resize((img_rows,img_cols))
-        gray = array(img.convert('L')).flatten()
+        im = cv2.imread(path + test_img)   
+        img = cv2.resize(im, (img_rows,img_cols))
+        gray = array(img).flatten()
         test.append(gray)
         print(j)
         j = j+1
 
+#########################################################################
+plt.figure(figsize=(8, 8))
+plt.title("Learning curve")
+plt.plot(hist.history["loss"], label="loss")
+plt.plot(hist.history["val_loss"], label="val_loss")
+plt.plot( np.argmin(hist.history["val_loss"]), np.min(hist.history["val_loss"]), marker="x", color="r", label="best model")
+plt.xlabel("Epochs")
+plt.ylabel("loss")
+plt.legend();
 
 #########################################################################
-X_test = array(test)
-X_test = X_test.reshape(X_test.shape[0], img_rows, img_cols, 1)
+X_test = array(X_test)
+X_test = X_test.reshape(X_test.shape[0], img_rows, img_cols, 3)
 
 # Assigning X_train and X_test as float
 X_test = X_test.astype('float32') 
@@ -188,8 +202,10 @@ X_test /= 255
 y_pred = model.predict_classes(X_test) # Predicts classes of all images in test data 
 
 p = model.predict_proba(X_test) # To predict probability
+score = model.evaluate(X_test, Y_test, verbose=0) # accuracy check
+print('Test accuracy:', score[1])
 res = []
-
+################################################################################
 for answers in range(0, len(p)):
     ans = copy(p[answers])
     for w in range(0,5):
@@ -237,4 +253,3 @@ print("Saved model to disk")
 
 # X_test and Y_test are saved so model can be tested 
 np.save('X_test', X_test)
-
